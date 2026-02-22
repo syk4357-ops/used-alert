@@ -1,0 +1,15 @@
+{
+  "name": "usd-krw-alert",
+  "version": "1.0.0",
+  "description": "USD/KRW 환율 알림 서비스",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}
