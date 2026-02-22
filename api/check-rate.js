@@ -1,29 +1,12 @@
 export default async function handler(req, res) {
   try {
-    // 한국수출입은행 API
-    const API_KEY = process.env.KOREAEXIM_API_KEY;
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    
+    // 무료 환율 API (실시간)
     const response = await fetch(
-      `https://www.koreaexim.go.kr/site/program/financial/exchangeJSON?authkey=${API_KEY}&searchdate=${today}&data=AP01`
+      'https://api.exchangerate-api.com/v4/latest/USD'
     );
     
     const data = await response.json();
-    
-    // USD 환율 찾기
-    const usdData = data.find(item => item.cur_unit === 'USD');
-    
-    if (!usdData) {
-      // 주말/공휴일엔 데이터 없음 - 전일 데이터 사용
-      return res.status(200).json({ 
-        success: false, 
-        message: '오늘 환율 데이터 없음 (주말/공휴일)',
-        checkedAt: new Date().toLocaleString('ko-KR')
-      });
-    }
-    
-    // 매매기준율 (쉼표 제거)
-    const currentRate = parseFloat(usdData.deal_bas_r.replace(/,/g, ''));
+    const currentRate = data.rates.KRW;
     
     // 목표가 체크
     const buyTargets = [];
@@ -50,7 +33,7 @@ export default async function handler(req, res) {
     let alertsTriggered = 0;
     
     for (const buy of buyTargets) {
-      const message = `💰🟢 매수 알림 (${buy.level}단계)\n\n💱 현재 환율: ₩${currentRate.toLocaleString()}\n🎯 목표가: ₩${buy.target.toLocaleString()}\n⏰ 시간: ${new Date().toLocaleString('ko-KR')}\n\n환율이 목표가 이하로 떨어졌습니다!`;
+      const message = `💰🟢 매수 알림 (${buy.level}단계)\n\n💱 현재 환율: ₩${currentRate.toFixed(2)}\n🎯 목표가: ₩${buy.target.toLocaleString()}\n⏰ 시간: ${new Date().toLocaleString('ko-KR')}\n\n환율이 목표가 이하로 떨어졌습니다!`;
       
       await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
         method: 'POST',
@@ -61,7 +44,7 @@ export default async function handler(req, res) {
     }
     
     for (const sell of sellTargets) {
-      const message = `📈🔴 매도 알림 (${sell.level}단계)\n\n💱 현재 환율: ₩${currentRate.toLocaleString()}\n🎯 목표가: ₩${sell.target.toLocaleString()}\n⏰ 시간: ${new Date().toLocaleString('ko-KR')}\n\n환율이 목표가 이상으로 올랐습니다!`;
+      const message = `📈🔴 매도 알림 (${sell.level}단계)\n\n💱 현재 환율: ₩${currentRate.toFixed(2)}\n🎯 목표가: ₩${sell.target.toLocaleString()}\n⏰ 시간: ${new Date().toLocaleString('ko-KR')}\n\n환율이 목표가 이상으로 올랐습니다!`;
       
       await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
         method: 'POST',
@@ -73,8 +56,8 @@ export default async function handler(req, res) {
     
     res.status(200).json({
       success: true,
-      currentRate,
-      source: '한국수출입은행',
+      currentRate: currentRate.toFixed(2),
+      source: 'ExchangeRate-API',
       checkedAt: new Date().toLocaleString('ko-KR'),
       alertsTriggered
     });
