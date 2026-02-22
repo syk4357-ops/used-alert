@@ -5,8 +5,10 @@ import React, { useState, useEffect } from 'react';
 export default function USDKRWAlertApp() {
   const [currentRate, setCurrentRate] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('monitor');
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [saveMessage, setSaveMessage] = useState('');
   
   const [settings, setSettings] = useState({
     buy: [
@@ -25,18 +27,46 @@ export default function USDKRWAlertApp() {
     ]
   });
 
-  // 로컬 스토리지에서 설정 불러오기
+  // 서버에서 설정 불러오기
   useEffect(() => {
-    const saved = localStorage.getItem('usdkrw-settings');
-    if (saved) {
-      setSettings(JSON.parse(saved));
-    }
+    const loadSettings = async () => {
+      try {
+        const response = await fetch('/api/settings');
+        const data = await response.json();
+        if (data.buy && data.sell) {
+          setSettings(data);
+        }
+      } catch (error) {
+        console.error('설정 불러오기 실패:', error);
+      }
+    };
+    loadSettings();
   }, []);
 
   // 설정 저장
-  const saveSettings = (newSettings) => {
+  const saveSettings = async (newSettings) => {
     setSettings(newSettings);
-    localStorage.setItem('usdkrw-settings', JSON.stringify(newSettings));
+    setSaving(true);
+    setSaveMessage('');
+    
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSettings)
+      });
+      
+      if (response.ok) {
+        setSaveMessage('✅ 저장 완료!');
+      } else {
+        setSaveMessage('❌ 저장 실패');
+      }
+    } catch (error) {
+      setSaveMessage('❌ 저장 실패');
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveMessage(''), 2000);
+    }
   };
 
   // 환율 가져오기
@@ -58,7 +88,7 @@ export default function USDKRWAlertApp() {
 
   useEffect(() => {
     fetchRate();
-    const interval = setInterval(fetchRate, 60000); // 1분마다 갱신
+    const interval = setInterval(fetchRate, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -104,9 +134,21 @@ export default function USDKRWAlertApp() {
         backgroundColor: '#1a1a2e',
         color: 'white',
         padding: '20px',
-        textAlign: 'center'
+        textAlign: 'center',
+        position: 'relative'
       }}>
         <h1 style={{ margin: 0, fontSize: '20px' }}>💱 USD/KRW 환율 알림</h1>
+        {saveMessage && (
+          <div style={{
+            position: 'absolute',
+            right: '15px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            fontSize: '14px'
+          }}>
+            {saveMessage}
+          </div>
+        )}
       </div>
 
       {/* 현재 환율 */}
@@ -130,6 +172,7 @@ export default function USDKRWAlertApp() {
         </div>
         <button 
           onClick={fetchRate}
+          disabled={loading}
           style={{
             marginTop: '15px',
             padding: '10px 25px',
@@ -137,10 +180,11 @@ export default function USDKRWAlertApp() {
             color: 'white',
             border: 'none',
             borderRadius: '20px',
-            fontSize: '14px'
+            fontSize: '14px',
+            opacity: loading ? 0.6 : 1
           }}
         >
-          🔄 새로고침
+          {loading ? '조회 중...' : '🔄 새로고침'}
         </button>
         
         {/* 알림 상태 */}
@@ -193,7 +237,7 @@ export default function USDKRWAlertApp() {
               fontWeight: activeTab === tab ? 'bold' : 'normal'
             }}
           >
-            {tab === 'monitor' ? '📊 모니터' : tab === 'buy' ? '🟢 매수설정' : '🔴 매도설정'}
+            {tab === 'monitor' ? '📊 모니터' : tab === 'buy' ? '🟢 매수' : '🔴 매도'}
           </button>
         ))}
       </div>
@@ -250,7 +294,7 @@ export default function USDKRWAlertApp() {
           }}>
             <h3 style={{ margin: '0 0 15px 0', fontSize: '16px' }}>🟢 매수 목표 설정</h3>
             <p style={{ color: '#666', fontSize: '13px', marginBottom: '20px' }}>
-              환율이 목표가 이하로 떨어지면 알림
+              환율이 목표가 이하로 떨어지면 Telegram 알림
             </p>
             
             {settings.buy.map((s, i) => (
@@ -263,7 +307,7 @@ export default function USDKRWAlertApp() {
                 backgroundColor: '#f9f9f9',
                 borderRadius: '10px'
               }}>
-                <span style={{ fontWeight: 'bold', minWidth: '60px' }}>{i + 1}단계</span>
+                <span style={{ fontWeight: 'bold', minWidth: '50px' }}>{i + 1}단계</span>
                 <input
                   type="number"
                   value={s.target}
@@ -278,13 +322,15 @@ export default function USDKRWAlertApp() {
                 />
                 <button
                   onClick={() => updateBuySetting(i, 'enabled', !s.enabled)}
+                  disabled={saving}
                   style={{
                     padding: '12px 15px',
                     backgroundColor: s.enabled ? '#4caf50' : '#ccc',
                     color: 'white',
                     border: 'none',
                     borderRadius: '8px',
-                    fontSize: '14px'
+                    fontSize: '14px',
+                    minWidth: '60px'
                   }}
                 >
                   {s.enabled ? 'ON' : 'OFF'}
@@ -293,71 +339,3 @@ export default function USDKRWAlertApp() {
             ))}
           </div>
         )}
-
-        {activeTab === 'sell' && (
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '15px',
-            padding: '20px'
-          }}>
-            <h3 style={{ margin: '0 0 15px 0', fontSize: '16px' }}>🔴 매도 목표 설정</h3>
-            <p style={{ color: '#666', fontSize: '13px', marginBottom: '20px' }}>
-              환율이 목표가 이상으로 오르면 알림
-            </p>
-            
-            {settings.sell.map((s, i) => (
-              <div key={i} style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                marginBottom: '15px',
-                padding: '15px',
-                backgroundColor: '#f9f9f9',
-                borderRadius: '10px'
-              }}>
-                <span style={{ fontWeight: 'bold', minWidth: '60px' }}>{i + 1}단계</span>
-                <input
-                  type="number"
-                  value={s.target}
-                  onChange={(e) => updateSellSetting(i, 'target', e.target.value)}
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    border: '1px solid #ddd',
-                    borderRadius: '8px',
-                    fontSize: '16px'
-                  }}
-                />
-                <button
-                  onClick={() => updateSellSetting(i, 'enabled', !s.enabled)}
-                  style={{
-                    padding: '12px 15px',
-                    backgroundColor: s.enabled ? '#f44336' : '#ccc',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '14px'
-                  }}
-                >
-                  {s.enabled ? 'ON' : 'OFF'}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-        
-        {/* 안내 메시지 */}
-        <div style={{
-          marginTop: '15px',
-          padding: '15px',
-          backgroundColor: '#fff3cd',
-          borderRadius: '10px',
-          fontSize: '13px',
-          color: '#856404'
-        }}>
-          ⚠️ 앱 설정은 이 기기에만 저장됩니다. 백그라운드 Telegram 알림은 Vercel 환경변수 설정을 따릅니다.
-        </div>
-      </div>
-    </div>
-  );
-}
